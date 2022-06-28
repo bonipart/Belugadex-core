@@ -1,9 +1,7 @@
-#![deny(missing_docs)]
-
 //! An Uniswap-like program for the Solana blockchain.
 
 pub mod constraints;
-pub mod curve;
+pub mod swap;
 pub mod error;
 pub mod instruction;
 pub mod processor;
@@ -14,5 +12,3 @@ mod entrypoint;
 
 // Export current sdk types for downstream users building with a different sdk version
 pub use solana_program;
-
-solana_program::declare_id!("SwapsVeCiPHMUAtzQWZw7RjsKjgCjhwU55QGu4U1Szw");

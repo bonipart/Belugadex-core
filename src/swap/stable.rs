@@ -1,7 +1,6 @@
-//! The curve.fi invariant calculator.
 use {
     crate::{
-        curve::calculator::{
+        swap::calculator::{
             CurveCalculator, DynPack, RoundDirection, SwapWithoutFeesResult, TradeDirection,
             TradingTokenResult,
         },

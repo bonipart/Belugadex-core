@@ -1,6 +1,6 @@
 //! State transition types
 
-use crate::curve::{base::SwapCurve, fees::Fees};
+use crate::swap::{base::SwapCurve, fees::Fees};
 use arrayref::{array_mut_ref, array_ref, array_refs, mut_array_refs};
 use enum_dispatch::enum_dispatch;
 use solana_program::{

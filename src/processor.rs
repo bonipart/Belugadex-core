@@ -2,7 +2,7 @@
 
 use crate::constraints::{SwapConstraints, SWAP_CONSTRAINTS};
 use crate::{
-    curve::{
+    swap::{
         base::SwapCurve,
         fees::Fees,
     },

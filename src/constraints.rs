@@ -1,7 +1,7 @@
 //! Various constraints as required for production environments
 
 use crate::{
-    curve::{
+    swap::{
         base::{CurveType, SwapCurve},
         fees::Fees,
     },

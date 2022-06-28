@@ -5,7 +5,7 @@ use solana_program::{
     program_pack::{Pack, Sealed},
 };
 
-use crate::curve::{
+use crate::swap::{
     calculator::{CurveCalculator, SwapWithoutFeesResult, TradeDirection},
     fees::Fees,
     stable::StableCurve,

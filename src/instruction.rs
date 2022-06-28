@@ -2,7 +2,7 @@
 
 #![allow(clippy::too_many_arguments)]
 
-use crate::curve::{base::SwapCurve, fees::Fees};
+use crate::swap::{base::SwapCurve, fees::Fees};
 use crate::error::SwapError;
 use solana_program::{
     instruction::{AccountMeta, Instruction},
