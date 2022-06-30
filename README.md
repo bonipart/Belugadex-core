@@ -8,7 +8,7 @@
 ## Getting Started
 1. Install one of available [Solana wallets](https://docs.solana.com/wallet-guide)
 2. Install library with `npm install @beluga_exchange/sdk` or `yarn add beluga_exchange/sdk` 
-3. Check [Usage](#usage) section or take a look at [examples](https://github.com/beluga-exchange/beluga-sdk/tree/main/examples) and [API reference](https://github.com/beluga-exchange/beluga-sdk/tree/main/docs)
+3. Check [Usage](#usage) section or take a look at [examples](https://github.com/beluga-exchange/beluga-sdk/tree/main/examples)
 
 ## Usage
 
@@ -42,7 +42,7 @@ async function trade() {
     minIncomeAmount: new BN(1_000_000_000), // 1 BELA
     // outcomeAmount: new BN(5_000_000) // 5 USDC
     mintFrom: usdc,
-    mintTo: rin,
+    mintTo: bela,
   })
 } 
 trade()
@@ -50,7 +50,7 @@ trade()
 
 ***
 
-### Add [pool](https://dex.aldrin.com/pools) liquidity
+### Add [pool](https://beluga.so/pools) liquidity
 
 
 ```js
@@ -66,9 +66,9 @@ async function depositLiquidity() {
 
   const transactionId = await tokenSwap.depositLiquidity({
     wallet: wallet,
-    poolMint: AUTHORIZED_POOLS.RIN_USDC.poolMint,
+    poolMint: AUTHORIZED_POOLS.BELA_USDC.poolMint,
     // A least 1 of parameters maxBase/maxQuote is required
-    // maxBase: new BN(1_000_000_000), // 1 RIN
+    // maxBase: new BN(1_000_000_000), // 1 BELA
     maxQuote: new BN(5_000_000), // 5 USDC
   })
 
@@ -92,11 +92,11 @@ export async function withdrawLiquidity() {
 
   const transactionId = await tokenSwap.withdrawLiquidity({
     wallet: wallet,
-    poolMint: AUTHORIZED_POOLS.RIN_USDC.poolMint,
+    poolMint: AUTHORIZED_POOLS.BELA_USDC.poolMint,
     poolTokenAmount: new BN(100_000), // LP tokens
     // A least 1 of parameters minBase/minQuote is required
-    // minBase: new BN(1_000_000), // 1 RIN
-    // minQuote: new BN(5_000_000), // 1 RIN
+    // minBase: new BN(1_000_000), // 1 BELA
+    // minQuote: new BN(5_000_000), // 1 BELA
   })
 
   console.log('Liquidity withdrawed: ', transactionId)
@@ -128,7 +128,7 @@ checkFarmed()
 
 ```
 
-### [Staking](https://dex.aldrin.com/staking)
+### [Staking](https://beluga.so/staking)
 
 ```js
 import BN from 'bn.js'
@@ -144,7 +144,7 @@ stakingClient.startStaking({
 })
 ```
 
-### [Unstaking](https://dex.aldrin.com/staking)
+### [Unstaking](https://beluga.so/staking)
 
 ```js
 import { wallet } from '../common'
@@ -157,7 +157,7 @@ stakingClient.endStaking({
 })
 ```
 
-### [Claim staking rewards](https://dex.aldrin.com/staking)
+### [Claim staking rewards](https://beluga.so/staking)
 
 ```js
 import { wallet } from '../common'
