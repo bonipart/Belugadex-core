@@ -2,7 +2,7 @@
 
 
 <p align="center">
-  [<a href="https://beluga.so">Website</a> |  <a href="https://github.com/aldrin-exchange/aldrin-sdk/tree/main/docs">API Reference</a> | <a href="https://github.com/aldrin-exchange/aldrin-sdk/tree/main/examples">Examples</a> ]
+  [<a href="https://beluga.so">Website</a> |  <a href="https://github.com/aldrin-exchange/aldrin-sdk/tree/main/examples">Examples</a> ]
 </p>
 
 ## Getting Started
