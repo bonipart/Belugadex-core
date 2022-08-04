@@ -36,7 +36,7 @@ Running end-to-end tests:
 ./do.sh e2e-test
 ```
 
-[View instructions for running fuzz tests here.](../fuzz)
+[View instructions for running fuzz tests here.]
 
 ### Clippy
 
