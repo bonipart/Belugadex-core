@@ -19,7 +19,7 @@ solana-install init 1.9.12
 To build the program, run:
 
 ```bash
-anchor build --program-name stable_swap
+cargo build-bpf
 ```
 
 ### Testing
