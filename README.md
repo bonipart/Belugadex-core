@@ -1,5 +1,8 @@
 # Belugadex-core
 
+# Devnet Testing
+
+Please visit our [devnet page](https://devnet.beluga.so) to test out core features.
 
 # StableSwap Program
 
