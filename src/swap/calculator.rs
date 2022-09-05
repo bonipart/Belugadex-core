@@ -112,6 +112,16 @@ pub trait CurveCalculator: Debug + DynPack {
         round_direction: RoundDirection,
     ) -> Option<TradingTokenResult>;
 
+    /// Get the amount of pool tokens for the withdrawn amount of token A or B.
+    fn withdraw_single_token_type_exact_out(
+        &self,
+        source_amount: u128,
+        swap_token_a_amount: u128,
+        swap_token_b_amount: u128,
+        pool_supply: u128,
+        trade_direction: TradeDirection,
+    ) -> Option<u128>;
+
     /// Validate that the given curve has no invalid parameters
     fn validate(&self) -> Result<(), SwapError>;
 

@@ -95,6 +95,33 @@ impl SwapCurve {
             owner_fee,
         })
     }
+    /// Get the amount of pool tokens for the withdrawn amount of token A or B
+    pub fn withdraw_single_token_type_exact_out(
+        &self,
+        source_amount: u128,
+        swap_token_a_amount: u128,
+        swap_token_b_amount: u128,
+        pool_supply: u128,
+        trade_direction: TradeDirection,
+        fees: &Fees,
+    ) -> Option<u128> {
+        if source_amount == 0 {
+            return Some(0);
+        }
+        // Get the trading fee incurred if *half* the source amount is swapped
+        // for the other side. Reference at:
+        // https://github.com/balancer-labs/balancer-core/blob/f4ed5d65362a8d6cec21662fb6eae233b0babc1f/contracts/BMath.sol#L117
+        let half_source_amount = std::cmp::max(1, source_amount.checked_div(2)?);
+        let trade_fee = fees.trading_fee(half_source_amount)?;
+        let source_amount = source_amount.checked_sub(trade_fee)?;
+        self.calculator.withdraw_single_token_type_exact_out(
+            source_amount,
+            swap_token_a_amount,
+            swap_token_b_amount,
+            pool_supply,
+            trade_direction,
+        )
+    }
 }
 
 /// Default implementation for SwapCurve cannot be derived because of
@@ -165,8 +192,7 @@ impl Pack for SwapCurve {
     }
 }
 
-/// Sensible default of CurveType to ConstantProduct, the most popular and
-/// well-known curve type.
+/// Sensible default of CurveType to stable
 impl Default for CurveType {
     fn default() -> Self {
         CurveType::Stable
@@ -178,9 +204,8 @@ impl TryFrom<u8> for CurveType {
 
     fn try_from(curve_type: u8) -> Result<Self, Self::Error> {
         match curve_type {
-            2 => Ok(CurveType::Stable),
+            0 => Ok(CurveType::Stable),
             _ => Err(ProgramError::InvalidAccountData),
         }
     }
 }
-

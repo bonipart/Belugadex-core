@@ -219,6 +219,39 @@ impl CurveCalculator for StableCurve {
         })
     }
 
+    fn withdraw_single_token_type_exact_out(
+        &self,
+        source_amount: u128,
+        swap_token_a_amount: u128,
+        swap_token_b_amount: u128,
+        pool_supply: u128,
+        trade_direction: TradeDirection,
+    ) -> Option<u128> {
+        if source_amount == 0 {
+            return Some(0);
+        }
+        let leverage = compute_a(self.amp)?;
+        let d0 = PreciseNumber::new(compute_d(
+            leverage,
+            swap_token_a_amount,
+            swap_token_b_amount,
+        )?)?;
+        let (withdraw_token_amount, other_token_amount) = match trade_direction {
+            TradeDirection::AtoB => (swap_token_a_amount, swap_token_b_amount),
+            TradeDirection::BtoA => (swap_token_b_amount, swap_token_a_amount),
+        };
+        let updated_deposit_token_amount = withdraw_token_amount.checked_sub(source_amount)?;
+        let d1 = PreciseNumber::new(compute_d(
+            leverage,
+            updated_deposit_token_amount,
+            other_token_amount,
+        )?)?;
+        let diff = d0.checked_sub(&d1)?;
+        let final_amount =
+            (diff.checked_mul(&PreciseNumber::new(pool_supply)?))?.checked_div(&d0)?;
+        final_amount.ceiling()?.to_imprecise()
+    }
+
     fn normalized_value(
         &self,
         swap_token_a_amount: u128,

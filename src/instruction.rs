@@ -66,6 +66,18 @@ pub struct WithdrawAllTokenTypes {
     pub minimum_token_b_amount: u64,
 }
 
+/// WithdrawSingleTokenTypeExactAmountOut instruction data
+#[cfg_attr(feature = "fuzz", derive(Arbitrary))]
+#[repr(C)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct WithdrawSingleTokenTypeExactAmountOut {
+    /// Amount of token A or B to receive
+    pub destination_token_amount: u64,
+    /// Maximum amount of pool tokens to burn. User receives an output of token A
+    /// or B based on the percentage of the pool tokens that are returned.
+    pub maximum_pool_token_amount: u64,
+}
+
 /// Instructions supported by the token swap program.
 #[repr(C)]
 #[derive(Debug, PartialEq)]
@@ -131,6 +143,20 @@ pub enum SwapInstruction {
     ///   9. `[writable]` Fee account, to receive withdrawal fees
     ///   10. `[]` Token program id
     WithdrawAllTokenTypes(WithdrawAllTokenTypes),
+    ///   Withdraw one token type from the pool at the current ratio given the
+    ///   exact amount out expected.
+    ///
+    ///   0. `[]` Token-swap
+    ///   1. `[]` swap authority
+    ///   2. `[]` user transfer authority
+    ///   3. `[writable]` Pool mint account, swap authority is the owner
+    ///   4. `[writable]` SOURCE Pool account, amount is transferable by user transfer authority.
+    ///   5. `[writable]` token_a Swap Account to potentially withdraw from.
+    ///   6. `[writable]` token_b Swap Account to potentially withdraw from.
+    ///   7. `[writable]` token_(A|B) User Account to credit
+    ///   8. `[writable]` Fee account, to receive withdrawal fees
+    ///   9. `[]` Token program id
+    WithdrawSingleTokenTypeExactAmountOut(WithdrawSingleTokenTypeExactAmountOut),
 }
 
 impl SwapInstruction {
@@ -174,6 +200,14 @@ impl SwapInstruction {
                     pool_token_amount,
                     minimum_token_a_amount,
                     minimum_token_b_amount,
+                })
+            }
+            4 => {
+                let (destination_token_amount, rest) = Self::unpack_u64(rest)?;
+                let (maximum_pool_token_amount, _rest) = Self::unpack_u64(rest)?;
+                Self::WithdrawSingleTokenTypeExactAmountOut(WithdrawSingleTokenTypeExactAmountOut {
+                    destination_token_amount,
+                    maximum_pool_token_amount,
                 })
             }
             _ => return Err(SwapError::InvalidInstruction.into()),
@@ -234,6 +268,16 @@ impl SwapInstruction {
                 buf.extend_from_slice(&pool_token_amount.to_le_bytes());
                 buf.extend_from_slice(&minimum_token_a_amount.to_le_bytes());
                 buf.extend_from_slice(&minimum_token_b_amount.to_le_bytes());
+            }
+            Self::WithdrawSingleTokenTypeExactAmountOut(
+                WithdrawSingleTokenTypeExactAmountOut {
+                    destination_token_amount,
+                    maximum_pool_token_amount,
+                },
+            ) => {
+                buf.push(5);
+                buf.extend_from_slice(&destination_token_amount.to_le_bytes());
+                buf.extend_from_slice(&maximum_pool_token_amount.to_le_bytes());
             }
         }
         buf
@@ -340,6 +384,43 @@ pub fn withdraw_all_token_types(
         AccountMeta::new(*swap_token_b_pubkey, false),
         AccountMeta::new(*destination_token_a_pubkey, false),
         AccountMeta::new(*destination_token_b_pubkey, false),
+        AccountMeta::new(*fee_account_pubkey, false),
+        AccountMeta::new_readonly(*token_program_id, false),
+    ];
+
+    Ok(Instruction {
+        program_id: *program_id,
+        accounts,
+        data,
+    })
+}
+
+/// Creates a 'withdraw_single_token_type_exact_amount_out' instruction.
+pub fn withdraw_single_token_type_exact_amount_out(
+    program_id: &Pubkey,
+    token_program_id: &Pubkey,
+    swap_pubkey: &Pubkey,
+    authority_pubkey: &Pubkey,
+    user_transfer_authority_pubkey: &Pubkey,
+    pool_mint_pubkey: &Pubkey,
+    fee_account_pubkey: &Pubkey,
+    pool_token_source_pubkey: &Pubkey,
+    swap_token_a_pubkey: &Pubkey,
+    swap_token_b_pubkey: &Pubkey,
+    destination_pubkey: &Pubkey,
+    instruction: WithdrawSingleTokenTypeExactAmountOut,
+) -> Result<Instruction, ProgramError> {
+    let data = SwapInstruction::WithdrawSingleTokenTypeExactAmountOut(instruction).pack();
+
+    let accounts = vec![
+        AccountMeta::new_readonly(*swap_pubkey, false),
+        AccountMeta::new_readonly(*authority_pubkey, false),
+        AccountMeta::new_readonly(*user_transfer_authority_pubkey, true),
+        AccountMeta::new(*pool_mint_pubkey, false),
+        AccountMeta::new(*pool_token_source_pubkey, false),
+        AccountMeta::new(*swap_token_a_pubkey, false),
+        AccountMeta::new(*swap_token_b_pubkey, false),
+        AccountMeta::new(*destination_pubkey, false),
         AccountMeta::new(*fee_account_pubkey, false),
         AccountMeta::new_readonly(*token_program_id, false),
     ];
