@@ -122,6 +122,8 @@ fn compute_new_destination_amount(
     let leverage: U256 = leverage.into();
     let new_source_amount: U256 = new_source_amount.into();
     let d_val: U256 = d_val.into();
+    let zero = U256::from(0u128);
+    let one = U256::from(1u128);
 
     // sum' = prod' = x
     // c =  D ** (n + 1) / (n ** (2 * n) * prod' * A)
@@ -134,8 +136,18 @@ fn compute_new_destination_amount(
     // Solve for y by approximating: y**2 + b*y = c
     let mut y = d_val;
     for _ in 0..ITERATIONS {
-        let (y_new, _) = (checked_u8_power(&y, 2)?.checked_add(c)?)
-            .checked_ceil_div(checked_u8_mul(&y, 2)?.checked_add(b)?.checked_sub(d_val)?)?;
+        let numerator = checked_u8_power(&y, 2)?.checked_add(c)?;
+        let denominator = checked_u8_mul(&y, 2)?.checked_add(b)?.checked_sub(d_val)?;
+        // checked_ceil_div is conservative, not allowing for a 0 return, but we can
+        // ceiling to 1 token in this case since we're solving through approximation,
+        // and not doing a constant product calculation
+        let (y_new, _) = numerator.checked_ceil_div(denominator).unwrap_or_else(|| {
+            if numerator == U256::from(0u128) {
+                (zero, zero)
+            } else {
+                (one, zero)
+            }
+        });
         if y_new == y {
             break;
         } else {
@@ -325,3 +337,257 @@ impl DynPack for StableCurve {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::swap::calculator::{
+        test::{
+            check_curve_value_from_swap,
+            check_pool_value_from_deposit, check_pool_value_from_withdraw,
+            check_withdraw_token_conversion, total_and_intermediate,
+            CONVERSION_BASIS_POINTS_GUARANTEE,
+        },
+        RoundDirection, INITIAL_SWAP_POOL_AMOUNT,
+    };
+    use proptest::prelude::*;
+    use sim::StableSwapModel;
+
+    #[test]
+    fn initial_pool_amount() {
+        let amp = 1;
+        let calculator = StableCurve { amp };
+        assert_eq!(calculator.new_pool_supply(), INITIAL_SWAP_POOL_AMOUNT);
+    }
+
+    fn check_pool_token_rate(
+        token_a: u128,
+        token_b: u128,
+        deposit: u128,
+        supply: u128,
+        expected_a: u128,
+        expected_b: u128,
+    ) {
+        let amp = 1;
+        let calculator = StableCurve { amp };
+        let results = calculator
+            .pool_tokens_to_trading_tokens(
+                deposit,
+                supply,
+                token_a,
+                token_b,
+                RoundDirection::Ceiling,
+            )
+            .unwrap();
+        assert_eq!(results.token_a_amount, expected_a);
+        assert_eq!(results.token_b_amount, expected_b);
+    }
+
+    #[test]
+    fn trading_token_conversion() {
+        check_pool_token_rate(2, 49, 5, 10, 1, 25);
+        check_pool_token_rate(100, 202, 5, 101, 5, 10);
+        check_pool_token_rate(5, 501, 2, 10, 1, 101);
+    }
+
+    #[test]
+    fn swap_zero() {
+        let curve = StableCurve { amp: 100 };
+        let result = curve.swap_without_fees(0, 100, 1_000_000_000_000_000, TradeDirection::AtoB);
+
+        let result = result.unwrap();
+        assert_eq!(result.source_amount_swapped, 0);
+        assert_eq!(result.destination_amount_swapped, 0);
+    }
+
+    proptest! {
+        #[test]
+        fn swap_no_fee(
+            swap_source_amount in 100..1_000_000_000_000_000_000u128,
+            swap_destination_amount in 100..1_000_000_000_000_000_000u128,
+            source_amount in 100..100_000_000_000u128,
+            amp in 1..150u64
+        ) {
+            prop_assume!(source_amount < swap_source_amount);
+
+            let curve = StableCurve { amp };
+
+            let model: StableSwapModel = StableSwapModel::new(
+                curve.amp.into(),
+                vec![swap_source_amount, swap_destination_amount],
+                N_COINS,
+            );
+
+            let result = curve.swap_without_fees(
+                source_amount,
+                swap_source_amount,
+                swap_destination_amount,
+                TradeDirection::AtoB,
+            );
+
+            let result = result.unwrap();
+            let sim_result = model.sim_exchange(0, 1, source_amount);
+
+            let diff =
+                (sim_result as i128 - result.destination_amount_swapped as i128).abs();
+
+            // tolerate a difference of 2 because of the ceiling during calculation
+            let tolerance = std::cmp::max(2, sim_result as i128 / 1_000_000_000);
+
+            assert!(
+                diff <= tolerance,
+                "result={}, sim_result={}, amp={}, source_amount={}, swap_source_amount={}, swap_destination_amount={}, diff={}",
+                result.destination_amount_swapped,
+                sim_result,
+                amp,
+                source_amount,
+                swap_source_amount,
+                swap_destination_amount,
+                diff
+            );
+        }
+    }
+
+    #[test]
+    fn pack_curve() {
+        let amp = 1;
+        let curve = StableCurve { amp };
+
+        let mut packed = [0u8; StableCurve::LEN];
+        Pack::pack_into_slice(&curve, &mut packed[..]);
+        let unpacked = StableCurve::unpack(&packed).unwrap();
+        assert_eq!(curve, unpacked);
+
+        let mut packed = vec![];
+        packed.extend_from_slice(&amp.to_le_bytes());
+        let unpacked = StableCurve::unpack(&packed).unwrap();
+        assert_eq!(curve, unpacked);
+    }
+
+    proptest! {
+        #[test]
+        fn curve_value_does_not_decrease_from_deposit(
+            pool_token_amount in 1..u64::MAX,
+            pool_token_supply in 1..u64::MAX,
+            swap_token_a_amount in 1..u64::MAX,
+            swap_token_b_amount in 1..u64::MAX,
+            amp in 1..100,
+        ) {
+            let pool_token_amount = pool_token_amount as u128;
+            let pool_token_supply = pool_token_supply as u128;
+            let swap_token_a_amount = swap_token_a_amount as u128;
+            let swap_token_b_amount = swap_token_b_amount as u128;
+            // Make sure we will get at least one trading token out for each
+            // side, otherwise the calculation fails
+            prop_assume!(pool_token_amount * swap_token_a_amount / pool_token_supply >= 1);
+            prop_assume!(pool_token_amount * swap_token_b_amount / pool_token_supply >= 1);
+            let curve = StableCurve {
+                amp: amp as u64
+            };
+            check_pool_value_from_deposit(
+                &curve,
+                pool_token_amount,
+                pool_token_supply,
+                swap_token_a_amount,
+                swap_token_b_amount,
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn curve_value_does_not_decrease_from_withdraw(
+            (pool_token_supply, pool_token_amount) in total_and_intermediate(),
+            swap_token_a_amount in 1..u64::MAX,
+            swap_token_b_amount in 1..u64::MAX,
+            amp in 1..100,
+        ) {
+            let pool_token_amount = pool_token_amount as u128;
+            let pool_token_supply = pool_token_supply as u128;
+            let swap_token_a_amount = swap_token_a_amount as u128;
+            let swap_token_b_amount = swap_token_b_amount as u128;
+            // Make sure we will get at least one trading token out for each
+            // side, otherwise the calculation fails
+            prop_assume!(pool_token_amount * swap_token_a_amount / pool_token_supply >= 1);
+            prop_assume!(pool_token_amount * swap_token_b_amount / pool_token_supply >= 1);
+            let curve = StableCurve {
+                amp: amp as u64
+            };
+            check_pool_value_from_withdraw(
+                &curve,
+                pool_token_amount,
+                pool_token_supply,
+                swap_token_a_amount,
+                swap_token_b_amount,
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn curve_value_does_not_decrease_from_swap(
+            source_token_amount in 1..u64::MAX,
+            swap_source_amount in 1..u64::MAX,
+            swap_destination_amount in 1..u64::MAX,
+            amp in 1..100,
+        ) {
+            let curve = StableCurve { amp: amp as u64 };
+            check_curve_value_from_swap(
+                &curve,
+                source_token_amount as u128,
+                swap_source_amount as u128,
+                swap_destination_amount as u128,
+                TradeDirection::AtoB
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn withdraw_token_conversion(
+            (pool_token_supply, pool_token_amount) in total_and_intermediate(),
+            swap_token_a_amount in 1..u64::MAX,
+            swap_token_b_amount in 1..u64::MAX,
+            amp in 1..100u64,
+        ) {
+            let curve = StableCurve { amp };
+            check_withdraw_token_conversion(
+                &curve,
+                pool_token_amount as u128,
+                pool_token_supply as u128,
+                swap_token_a_amount as u128,
+                swap_token_b_amount as u128,
+                TradeDirection::AtoB,
+                CONVERSION_BASIS_POINTS_GUARANTEE
+            );
+            check_withdraw_token_conversion(
+                &curve,
+                pool_token_amount as u128,
+                pool_token_supply as u128,
+                swap_token_a_amount as u128,
+                swap_token_b_amount as u128,
+                TradeDirection::BtoA,
+                CONVERSION_BASIS_POINTS_GUARANTEE
+            );
+        }
+    }
+
+    // this test comes from a failed proptest
+    #[test]
+    fn withdraw_token_conversion_huge_withdrawal() {
+        let pool_token_supply: u64 = 12798273514859089136;
+        let pool_token_amount: u64 = 12798243809352362806;
+        let swap_token_a_amount: u64 = 10000000000000000000;
+        let swap_token_b_amount: u64 = 6000000000000000000;
+        let amp = 72;
+        let curve = StableCurve { amp };
+        check_withdraw_token_conversion(
+            &curve,
+            pool_token_amount as u128,
+            pool_token_supply as u128,
+            swap_token_a_amount as u128,
+            swap_token_b_amount as u128,
+            TradeDirection::AtoB,
+            CONVERSION_BASIS_POINTS_GUARANTEE,
+        );
+    }
+}

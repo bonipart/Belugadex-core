@@ -96,3 +96,93 @@ pub const SWAP_CONSTRAINTS: Option<SwapConstraints> = {
     }
 };
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::swap::{base::CurveType, stable::StableCurve};
+    use std::sync::Arc;
+
+    #[test]
+    fn validate_fees() {
+        let trade_fee_numerator = 1;
+        let trade_fee_denominator = 4;
+        let owner_trade_fee_numerator = 2;
+        let owner_trade_fee_denominator = 5;
+        let owner_withdraw_fee_numerator = 4;
+        let owner_withdraw_fee_denominator = 10;
+        let host_fee_numerator = 10;
+        let host_fee_denominator = 100;
+        let owner_key = "";
+        let amp = 2;
+        let curve_type = CurveType::Stable;
+        let valid_fees = Fees {
+            trade_fee_numerator,
+            trade_fee_denominator,
+            owner_trade_fee_numerator,
+            owner_trade_fee_denominator,
+            owner_withdraw_fee_numerator,
+            owner_withdraw_fee_denominator,
+            host_fee_numerator,
+            host_fee_denominator,
+        };
+        let calculator = StableCurve { amp };
+        let swap_curve = SwapCurve {
+            curve_type,
+            calculator: Arc::new(calculator.clone()),
+        };
+        let constraints = SwapConstraints {
+            owner_key,
+            valid_curve_types: &[curve_type],
+            fees: &valid_fees,
+        };
+
+        constraints.validate_curve(&swap_curve).unwrap();
+        constraints.validate_fees(&valid_fees).unwrap();
+
+        let mut fees = valid_fees.clone();
+        fees.trade_fee_numerator = trade_fee_numerator - 1;
+        assert_eq!(
+            Err(SwapError::InvalidFee.into()),
+            constraints.validate_fees(&fees),
+        );
+        fees.trade_fee_numerator = trade_fee_numerator;
+
+        // passing higher fee is ok
+        fees.trade_fee_numerator = trade_fee_numerator - 1;
+        assert_eq!(constraints.validate_fees(&valid_fees), Ok(()));
+        fees.trade_fee_numerator = trade_fee_numerator;
+
+        fees.trade_fee_denominator = trade_fee_denominator - 1;
+        assert_eq!(
+            Err(SwapError::InvalidFee.into()),
+            constraints.validate_fees(&fees),
+        );
+        fees.trade_fee_denominator = trade_fee_denominator;
+
+        fees.trade_fee_denominator = trade_fee_denominator + 1;
+        assert_eq!(
+            Err(SwapError::InvalidFee.into()),
+            constraints.validate_fees(&fees),
+        );
+        fees.trade_fee_denominator = trade_fee_denominator;
+
+        fees.owner_trade_fee_numerator = owner_trade_fee_numerator - 1;
+        assert_eq!(
+            Err(SwapError::InvalidFee.into()),
+            constraints.validate_fees(&fees),
+        );
+        fees.owner_trade_fee_numerator = owner_trade_fee_numerator;
+
+        // passing higher fee is ok
+        fees.owner_trade_fee_numerator = owner_trade_fee_numerator - 1;
+        assert_eq!(constraints.validate_fees(&valid_fees), Ok(()));
+        fees.owner_trade_fee_numerator = owner_trade_fee_numerator;
+
+        fees.owner_trade_fee_denominator = owner_trade_fee_denominator - 1;
+        assert_eq!(
+            Err(SwapError::InvalidFee.into()),
+            constraints.validate_fees(&fees),
+        );
+        fees.owner_trade_fee_denominator = owner_trade_fee_denominator;
+    }
+}

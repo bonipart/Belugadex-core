@@ -275,7 +275,7 @@ impl SwapInstruction {
                     maximum_pool_token_amount,
                 },
             ) => {
-                buf.push(5);
+                buf.push(4);
                 buf.extend_from_slice(&destination_token_amount.to_le_bytes());
                 buf.extend_from_slice(&maximum_pool_token_amount.to_le_bytes());
             }
@@ -484,3 +484,131 @@ pub fn unpack<T>(input: &[u8]) -> Result<&T, ProgramError> {
     Ok(val)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::swap::{base::CurveType, stable::StableCurve};
+    use std::sync::Arc;
+
+    #[test]
+    fn pack_intialize() {
+        let trade_fee_numerator: u64 = 1;
+        let trade_fee_denominator: u64 = 4;
+        let owner_trade_fee_numerator: u64 = 2;
+        let owner_trade_fee_denominator: u64 = 5;
+        let owner_withdraw_fee_numerator: u64 = 1;
+        let owner_withdraw_fee_denominator: u64 = 3;
+        let host_fee_numerator: u64 = 5;
+        let host_fee_denominator: u64 = 20;
+        let fees = Fees {
+            trade_fee_numerator,
+            trade_fee_denominator,
+            owner_trade_fee_numerator,
+            owner_trade_fee_denominator,
+            owner_withdraw_fee_numerator,
+            owner_withdraw_fee_denominator,
+            host_fee_numerator,
+            host_fee_denominator,
+        };
+        let amp: u64 = 1;
+        let curve_type = CurveType::Stable;
+        let calculator = Arc::new(StableCurve { amp });
+        let swap_curve = SwapCurve {
+            curve_type,
+            calculator,
+        };
+        let check = SwapInstruction::Initialize(Initialize { fees, swap_curve });
+        let packed = check.pack();
+        let mut expect = vec![0u8];
+        expect.extend_from_slice(&trade_fee_numerator.to_le_bytes());
+        expect.extend_from_slice(&trade_fee_denominator.to_le_bytes());
+        expect.extend_from_slice(&owner_trade_fee_numerator.to_le_bytes());
+        expect.extend_from_slice(&owner_trade_fee_denominator.to_le_bytes());
+        expect.extend_from_slice(&owner_withdraw_fee_numerator.to_le_bytes());
+        expect.extend_from_slice(&owner_withdraw_fee_denominator.to_le_bytes());
+        expect.extend_from_slice(&host_fee_numerator.to_le_bytes());
+        expect.extend_from_slice(&host_fee_denominator.to_le_bytes());
+        expect.push(curve_type as u8);
+        expect.extend_from_slice(&amp.to_le_bytes());
+        expect.extend_from_slice(&[0u8; 24]);
+        assert_eq!(packed, expect);
+        let unpacked = SwapInstruction::unpack(&expect).unwrap();
+        assert_eq!(unpacked, check);
+    }
+
+    #[test]
+    fn pack_swap() {
+        let amount_in: u64 = 2;
+        let minimum_amount_out: u64 = 10;
+        let check = SwapInstruction::Swap(Swap {
+            amount_in,
+            minimum_amount_out,
+        });
+        let packed = check.pack();
+        let mut expect = vec![1];
+        expect.extend_from_slice(&amount_in.to_le_bytes());
+        expect.extend_from_slice(&minimum_amount_out.to_le_bytes());
+        assert_eq!(packed, expect);
+        let unpacked = SwapInstruction::unpack(&expect).unwrap();
+        assert_eq!(unpacked, check);
+    }
+
+    #[test]
+    fn pack_deposit() {
+        let pool_token_amount: u64 = 5;
+        let maximum_token_a_amount: u64 = 10;
+        let maximum_token_b_amount: u64 = 20;
+        let check = SwapInstruction::DepositAllTokenTypes(DepositAllTokenTypes {
+            pool_token_amount,
+            maximum_token_a_amount,
+            maximum_token_b_amount,
+        });
+        let packed = check.pack();
+        let mut expect = vec![2];
+        expect.extend_from_slice(&pool_token_amount.to_le_bytes());
+        expect.extend_from_slice(&maximum_token_a_amount.to_le_bytes());
+        expect.extend_from_slice(&maximum_token_b_amount.to_le_bytes());
+        assert_eq!(packed, expect);
+        let unpacked = SwapInstruction::unpack(&expect).unwrap();
+        assert_eq!(unpacked, check);
+    }
+
+    #[test]
+    fn pack_withdraw() {
+        let pool_token_amount: u64 = 1212438012089;
+        let minimum_token_a_amount: u64 = 102198761982612;
+        let minimum_token_b_amount: u64 = 2011239855213;
+        let check = SwapInstruction::WithdrawAllTokenTypes(WithdrawAllTokenTypes {
+            pool_token_amount,
+            minimum_token_a_amount,
+            minimum_token_b_amount,
+        });
+        let packed = check.pack();
+        let mut expect = vec![3];
+        expect.extend_from_slice(&pool_token_amount.to_le_bytes());
+        expect.extend_from_slice(&minimum_token_a_amount.to_le_bytes());
+        expect.extend_from_slice(&minimum_token_b_amount.to_le_bytes());
+        assert_eq!(packed, expect);
+        let unpacked = SwapInstruction::unpack(&expect).unwrap();
+        assert_eq!(unpacked, check);
+    }
+
+    #[test]
+    fn pack_withdraw_one_exact_out() {
+        let destination_token_amount: u64 = 102198761982612;
+        let maximum_pool_token_amount: u64 = 1212438012089;
+        let check = SwapInstruction::WithdrawSingleTokenTypeExactAmountOut(
+            WithdrawSingleTokenTypeExactAmountOut {
+                destination_token_amount,
+                maximum_pool_token_amount,
+            },
+        );
+        let packed = check.pack();
+        let mut expect = vec![4];
+        expect.extend_from_slice(&destination_token_amount.to_le_bytes());
+        expect.extend_from_slice(&maximum_pool_token_amount.to_le_bytes());
+        assert_eq!(packed, expect);
+        let unpacked = SwapInstruction::unpack(&expect).unwrap();
+        assert_eq!(unpacked, check);
+    }
+}
